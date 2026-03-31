@@ -6,21 +6,25 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const axios = require('axios');
-const path = require('path'); // 🌟 引入路径模块
+const path = require('path'); 
 
 const app = express();
+
+// ==========================================
+// ⚙️ 基础中间件配置
+// ==========================================
 app.use(cors());
 app.use(express.json());
 
 // ==========================================
-// 🔑 核心配置区
+// 🔑 核心配置区 (环境变量)
 // ==========================================
 const JWT_SECRET = process.env.JWT_SECRET || 'SuperSecretCloudStudyRoom2026'; 
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || 'sk-b8855c79186a496d95851bd1d2b41580'; 
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 🗄️ 1. 配置 MySQL 数据库连接池 (对接 TiDB 云数据库)
+// 🗄️ 1. 配置 MySQL 数据库连接池
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -35,6 +39,7 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+// 测试数据库连接
 pool.getConnection()
   .then(conn => {
     console.log('✅ MySQL 数据库连接成功！');
@@ -89,7 +94,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ==========================================
-// 📋 4. 任务清单接口 (新增：对接 StudyRoom.vue)
+// 📋 4. 任务清单接口
 // ==========================================
 app.get('/api/tasks', authenticateToken, async (req, res) => {
   try {
@@ -120,7 +125,7 @@ app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
-// 📊 5. 大盘、AI 与 课表接口
+// 📊 5. 统计、AI 与 记录接口
 // ==========================================
 app.get('/api/study/stats', authenticateToken, async (req, res) => {
   const userId = req.user.id; 
@@ -129,10 +134,13 @@ app.get('/api/study/stats', authenticateToken, async (req, res) => {
     const totalFocusTime = sessionResult[0].totalTime || 0; 
     const [taskResult] = await pool.query('SELECT COUNT(*) as completedTasks FROM tasks WHERE user_id = ? AND is_completed = TRUE', [userId]);
     const completedTasks = taskResult[0].completedTasks || 0;
+    
+    // 查询最近7天数据
     const [weeklyResult] = await pool.query(`
       SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as date_str, SUM(duration) as daily_total
       FROM study_sessions WHERE user_id = ? AND created_at >= CURDATE() - INTERVAL 6 DAY GROUP BY date_str ORDER BY date_str ASC
     `, [userId]);
+
     const last7Days = []; const weeklyData = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
@@ -148,7 +156,12 @@ app.get('/api/study/stats', authenticateToken, async (req, res) => {
 app.post('/api/ai/summarize', authenticateToken, async (req, res) => {
   try {
     const aiResponse = await axios.post('https://api.deepseek.com/chat/completions', {
-      model: "deepseek-chat", messages: [{ role: "system", content: "你是一个专业的知识总结助手。" }, { role: "user", content: `提炼 Markdown 格式笔记：\n${req.body.content}` }], temperature: 0.3 
+      model: "deepseek-chat", 
+      messages: [
+        { role: "system", content: "你是一个专业的知识总结助手。" }, 
+        { role: "user", content: `提炼 Markdown 格式笔记：\n${req.body.content}` }
+      ], 
+      temperature: 0.3 
     }, { headers: { 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` } });
     res.json({ code: 200, data: aiResponse.data.choices[0].message.content });
   } catch (error) { res.status(500).json({ code: 500 }); }
@@ -183,20 +196,26 @@ app.post('/api/study/record', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
-// 🌐 6. 静态资源托管 (🌟 关键修改：解决 Cannot GET /)
+// 🌐 6. 静态资源托管与单页应用(SPA)路由
 // ==========================================
-// 注意：必须先写 API 路由，再写静态托管
-app.use(express.static(path.join(__dirname, 'dist')));
+// 🌟 必须在所有 API 接口之后定义
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath));
 
-// 🌟 处理 Vue Router 的 History 模式：所有非 API 请求都指向 index.html
+// 🌟 核心：捕获所有非 API 的 GET 请求，返回 index.html
+// 这样刷新页面或直接输入网址时才不会 Cannot GET
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    res.sendFile(path.join(distPath, 'index.html'));
   }
 });
 
 // ==========================================
-// 🌟 端口监听
+// 🌟 启动服务器
 // ==========================================
-const PORT = process.env.PORT || 10000; // Render 默认使用 10000 端口
-app.listen(PORT, () => { console.log(`🚀 服务已启动，监听端口: ${PORT}`); });
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => { 
+  console.log(`🚀 服务运行成功！`);
+  console.log(`📡 监听端口: ${PORT}`);
+  console.log(`📂 静态文件目录: ${distPath}`);
+});
