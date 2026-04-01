@@ -81,7 +81,6 @@ app.post('/api/register', async (req, res) => {
     const [result] = await pool.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword]);
     res.status(201).json({ message: '注册成功', userId: result.insertId });
   } catch (err) {
-    // 👇 修改了这里：加上 console.error 把真实错误打印到 Render 日志里
     console.error("🚨 注册接口抓到报错了：", err); 
     res.status(500).json({ message: '服务器内部错误' });
   }
@@ -97,7 +96,10 @@ app.post('/api/login', async (req, res) => {
     if (!isMatch) return res.status(401).json({ message: '密码错误' });
     const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ message: '登录成功', token: token, username: user.username });
-  } catch (err) { res.status(500).json({ message: '服务器内部错误' }); }
+  } catch (err) {
+    console.error("🚨 登录接口抓到报错了：", err); 
+    res.status(500).json({ message: '服务器内部错误' });
+  }
 });
 
 // ==========================================
@@ -107,28 +109,40 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
   try {
     const [rows] = await pool.query('SELECT id, content, is_completed as completed FROM tasks WHERE user_id = ? ORDER BY id DESC', [req.user.id]);
     res.json({ code: 200, data: rows });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 获取任务列表报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.post('/api/tasks', authenticateToken, async (req, res) => {
   try {
     const [result] = await pool.query('INSERT INTO tasks (user_id, content) VALUES (?, ?)', [req.user.id, req.body.content]);
     res.json({ code: 200, id: result.insertId });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 创建新任务报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
   try {
     await pool.query('UPDATE tasks SET is_completed = ? WHERE id = ? AND user_id = ?', [req.body.completed, req.params.id, req.user.id]);
     res.json({ code: 200 });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 更新任务状态报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.delete('/api/tasks/:id', authenticateToken, async (req, res) => {
   try {
     await pool.query('DELETE FROM tasks WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     res.json({ code: 200 });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 删除任务报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 // ==========================================
@@ -157,7 +171,10 @@ app.get('/api/study/stats', authenticateToken, async (req, res) => {
       weeklyData.push(foundDay ? Number(foundDay.daily_total) : 0);
     }
     res.json({ code: 200, data: { totalFocusTime, completedTasks, continuousDays: 3, weeklyData, weeklyLabels: last7Days } });
-  } catch (error) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 获取统计数据报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.post('/api/ai/summarize', authenticateToken, async (req, res) => {
@@ -171,35 +188,50 @@ app.post('/api/ai/summarize', authenticateToken, async (req, res) => {
       temperature: 0.3 
     }, { headers: { 'Authorization': `Bearer ${DEEPSEEK_API_KEY}` } });
     res.json({ code: 200, data: aiResponse.data.choices[0].message.content });
-  } catch (error) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 AI 总结接口报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.get('/api/cards', authenticateToken, async (req, res) => {
   try {
     const [cards] = await pool.query('SELECT * FROM knowledge_cards WHERE user_id = ? ORDER BY created_at DESC', [req.user.id]);
     res.json({ code: 200, data: cards });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 获取知识卡片报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.post('/api/cards', authenticateToken, async (req, res) => {
   try {
     const [result] = await pool.query('INSERT INTO knowledge_cards (user_id, title, content) VALUES (?, ?, ?)', [req.user.id, req.body.title, req.body.content]);
     res.json({ code: 200, id: result.insertId });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 创建知识卡片报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.delete('/api/cards/:id', authenticateToken, async (req, res) => {
   try {
     await pool.query('DELETE FROM knowledge_cards WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     res.json({ code: 200 });
-  } catch (err) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 删除知识卡片报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 app.post('/api/study/record', authenticateToken, async (req, res) => {
   try {
     await pool.query('INSERT INTO study_sessions (user_id, duration) VALUES (?, ?)', [req.user.id, req.body.duration]);
     res.json({ code: 200 });
-  } catch (error) { res.status(500).json({ code: 500 }); }
+  } catch (err) {
+    console.error("🚨 保存学习记录报错：", err);
+    res.status(500).json({ code: 500 });
+  }
 });
 
 // ==========================================
@@ -210,7 +242,6 @@ const distPath = path.join(__dirname, 'dist');
 app.use(express.static(distPath));
 
 // 🌟 核心：捕获所有非 API 的 GET 请求，返回 index.html
-// 这样刷新页面或直接输入网址时才不会 Cannot GET
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(distPath, 'index.html'));
