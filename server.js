@@ -67,6 +67,9 @@ const authenticateToken = (req, res, next) => {
 // ==========================================
 // 🚀 2. 身份验证接口
 // ==========================================
+// ==========================================
+// 🚀 2. 身份验证接口
+// ==========================================
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ message: '不能为空' });
@@ -81,8 +84,12 @@ app.post('/api/register', async (req, res) => {
     const [result] = await pool.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword]);
     res.status(201).json({ message: '注册成功', userId: result.insertId });
   } catch (err) {
-    console.error("🚨 注册接口抓到报错了：", err); 
-    res.status(500).json({ message: '服务器内部错误' });
+    // 👇 绝杀：不管 Render 日志刷不刷新，直接把真实的数据库报错顺着网线砸回给浏览器！
+    res.status(500).json({ 
+      message: '服务器内部错误', 
+      realError: err.message,   // 具体的报错文字（比如表不存在、语法错误）
+      errorCode: err.code       // 具体的报错代码（比如 ER_NO_SUCH_TABLE）
+    });
   }
 });
 
