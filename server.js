@@ -70,14 +70,21 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ message: '不能为空' });
+  
   try {
     const [existingUsers] = await pool.query('SELECT * FROM users WHERE username = ?', [username]);
     if (existingUsers.length > 0) return res.status(409).json({ message: '已被注册' });
+    
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+    
     const [result] = await pool.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword]);
     res.status(201).json({ message: '注册成功', userId: result.insertId });
-  } catch (err) { res.status(500).json({ message: '服务器内部错误' }); }
+  } catch (err) {
+    // 👇 修改了这里：加上 console.error 把真实错误打印到 Render 日志里
+    console.error("🚨 注册接口抓到报错了：", err); 
+    res.status(500).json({ message: '服务器内部错误' });
+  }
 });
 
 app.post('/api/login', async (req, res) => {
